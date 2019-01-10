@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Gomoku</title>
+    <style type="text/css">
+        canvas {
+            padding: 0;
+            margin: auto;
+            display: block;
+            border: 1px solid black;
+            background-color: grey;
+        }
+
+        h3 {
+            text-align: center;
+            color: red;
+        }
+
+        button {
+            margin: auto;
+            padding: 10px 20px;
+            font-size: 20px;
+            border-radius: 8px;
+            border: solid 1px white;
+            -webkit-transition-duration: 0.4s;
+            transition-duration: 0.4s;
+        }
+
+        button:hover {
+            background-color: #008CBA;
+        }
+    </style>
+</head>
+
+<body onload="run()">
+    <button id='black'>black</button>
+    <button id='white'>white</button>
+    <h3 id="h3"></h3>
+    <canvas id="canvas" height="600" width="600"></canvas>
+</body>
+
+<script type="text/javascript">
+    function run() {
+        board();
+        var canvas = document.getElementById("canvas");
+        const ws = new WebSocket('ws://localhost:8000/ws');
+        var color;
+        var lastmove;
+        canvas.addEventListener("mousedown", getPosition, false);
+        ws.addEventListener('open', function (event) {
+            // ws.send('Hello Server!');
+        });
+        ws.addEventListener('message', function (event) {
+            console.log('Message from server ', event.data);
+            if (event.data == 'win') {
+                win(lastmove);
+            } else {
+                c = event.data.split(',')[0];
+                x = event.data.split(',')[1];
+                y = event.data.split(',')[2];
+                lastmove = c;
+                move(x, y, c);
+            }
+        });
+        ws.addEventListener('error', function (event) {
+            console.log('Error ', event.data);
+        });
+        var blackbtn = document.getElementById("black");
+        var whitebtn = document.getElementById("white");
+        blackbtn.addEventListener('click', function () {
+            color = "black";
+            this.style.backgroundColor = '#008CBA';
+        });
+        whitebtn.addEventListener('click', function () {
+            color = "white";
+            this.style.backgroundColor = '#008CBA';
+        });
+
+        function board() {
+            var canvas = document.getElementById("canvas");
+            if (canvas.getContext) {
+                var ctx = canvas.getContext("2d");
+
+                for (var i = 30; i <= canvas.width - 30; i += 30) {
+                    ctx.beginPath();
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = "black";
+                    ctx.moveTo(i, 30);
+                    ctx.lineTo(i, canvas.width - 30);
+                    ctx.stroke();
+                    ctx.moveTo(30, i);
+                    ctx.lineTo(canvas.width - 30, i);
+                    ctx.stroke();
+                }
+
+            }
+        }
+
+        function move(x, y, color) {
+            x = x * 30;
+            y = y * 30;
+            var canvas = document.getElementById("canvas");
+            var ctx = canvas.getContext("2d");
+            var radius = 14;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function axis(x) {
+            return Math.floor((x + 15) / 30);
+        }
+
+        function getPosition(event) {
+            var x = event.x;
+            var y = event.y;
+            var canvas = document.getElementById("canvas");
+            x -= canvas.offsetLeft;
+            y -= canvas.offsetTop;
+            x = axis(x)
+            y = axis(y);
+            if (lastmove != color) {
+                ws.send(color + ',' + x + ',' + y);
+
+            }
+        }
+
+        function win(e) {
+            document.getElementById("h3").innerHTML = e + ' Win!';
+        }
+
+    }
+</script>
+
+</html>
