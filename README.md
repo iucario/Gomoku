@@ -9,9 +9,7 @@ open `host:port` in browser
 
 ### TODO
 
-- server list in main menu
-
-- AI player
+- special effects
 
 - observing system
 

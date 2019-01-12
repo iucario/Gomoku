@@ -2,11 +2,12 @@ import tornado.ioloop
 import tornado.web
 import tornado.websocket
 import uuid
+from ai import Bot
 
 
-clients = {} # uid: Client
-rooms   = {} # bid: Room
-uids    = {} # self: uid
+clients = {}  # uid: Client
+rooms = {}  # bid: Room
+uids = {}  # self: uid
 
 
 class Client():
@@ -16,26 +17,28 @@ class Client():
         self.board = []
         self.rival = None
         self.room = None
+        self.single = False
 
 
 class Room():
     def __init__(self, bid, name):
-        self.bid = bid # black uuid
-        self.wid = None # white uuid
+        self.bid = bid  # black uuid
+        self.wid = None  # white uuid
         self.board = []
         self.bsocket = None
         self.wsocket = None
         self.name = name
         self.num = 1
-    
+        self.single = False
+
     def info(self):
         return {'name': self.name, 'white': self.wid, 'num': self.num}
-    
+
     def get_board(self, uid):
         if uid == self.bid or uid == self.wid:
             return self.board
         return False
-    
+
     def lose(self, uid):
         if uid == self.bid:
             self.wsocket.write_message('white win!')
@@ -71,6 +74,8 @@ class JoinRoom(tornado.web.RequestHandler):
         bid = self.get_argument('bid')
         uid = self.get_argument('uuid')
         room = rooms[bid]
+        if room.single:
+            return
         room.wid = uid
         room.num = 2
         room.wsocket = clients[uid].socket
@@ -84,6 +89,20 @@ class JoinRoom(tornado.web.RequestHandler):
         clients[uid].socket.write_message('start')
         clients[bid].socket.write_message('start')
         self.write('join')
+
+
+class SinglePlayer(tornado.websocket.WebSocketHandler):
+    def get(self):
+        name = self.get_argument('name', 'AI')
+        uid = self.get_argument('uuid')
+        rooms[uid] = Room(uid, name)
+        rooms[uid].single = True
+        clients[uid].single = True
+        rooms[uid].bsocket = clients[uid].socket
+        clients[uid].room = rooms[uid]
+        bot = Bot()
+        clients[uid].rival = bot
+        self.write(rooms[uid].info())
 
 
 class EchoWebSocket(tornado.websocket.WebSocketHandler):
@@ -100,55 +119,80 @@ class EchoWebSocket(tornado.websocket.WebSocketHandler):
         print('Message:', message)
         color, x, y = message.split(',')
         board = self.get_board()
-        if 0 < int(x) < 20 and 0 < int(y) < 20 and (x, y) not in board:
+        x, y = int(x), int(y)
+        if 0 < x < 16 and 0 < y < 16 and (x, y) not in board:
+            board.append((x, y))
             u = uids[self]
             c = clients[u]
-            c.rival.socket.write_message(message)
-            self.write_message(message)
-            if self.check_win(int(x), int(y)):
-                print(color, 'win')
-                c.rival.socket.write_message(color + ' win!')
-                self.write_message(color + ' win!')
+            if not c.single:
+                c.rival.socket.write_message(message)
+                self.write_message(message)
+                win = self.check_win(x, y)
+                if win:
+                    print(color, 'win', win)
+                    c.rival.socket.write_message(color + ' win!')
+                    self.write_message(
+                        color + ' win! ' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+            else:
+                self.write_message(message)
+                win = self.check_win(x, y)
+                if win:
+                    print(color, 'win', win)
+                    self.write_message(
+                        color + ' win! ' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                    return
+                c.rival.move(x, y, 'b')
+                i, j = c.rival.next_move()
+                board.append((i, j))
+                c.rival.move(i, j, 'w')
+                print('Bot', i, j)
+                self.write_message('white,' + str(i) + ',' + str(j))
+                win = self.check_win(i, j)
+                if win:
+                    print('white', 'win', win)
+                    self.write_message(
+                        'white win! ' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                    return
 
     def on_close(self):  # remove from clients, delete room, board, win condition
         print("WebSocket closed")
         uid = uids[self]
         c = clients[uid]
-        if c.rival:
-            c.room.lose(uid)
-            del rooms[c.room.bid]
+        if not c.single:
+            if c.rival:
+                c.room.lose(uid)
+        else:
+            del c.rival
+        del rooms[c.room.bid]
         del clients[uid]
-
-
 
     def check_win(self, x, y):
         board = self.get_board()
-        board.append((x, y))
         moves = board[(len(board)-1) % 2::2]
         for i in range(0, 5):  # horizontal
             for j in range(0, 5):
                 if (x-i+j, y) not in moves:
                     break
                 elif j == 4:
-                    return True
+                    return (x-i, y, 0)
         for i in range(0, 5):  # vertical
             for j in range(0, 5):
                 if (x, y-i+j) not in moves:
                     break
                 elif j == 4:
-                    return True
-        for i in range(0, 5):
+                    return (x, y-i, 2)
+        for i in range(0, 5):  # 45 degree
             for j in range(0, 5):
                 if (x-i+j, y+i-j) not in moves:
                     break
                 elif j == 4:
-                    return True
-        for i in range(0, 5):
+                    return (x-i, y+i, 1)
+        for i in range(0, 5):  # 135 degree
             for j in range(0, 5):
                 if (x-i+j, y-i+j) not in moves:
                     break
                 elif j == 4:
-                    return True
+                    return (x-i, y-i, 3)
         return False
 
     def get_board(self):
@@ -163,6 +207,7 @@ def make_app():
         (r'/room', RoomHandler),
         (r'/create', CreateRoom),
         (r'/join', JoinRoom),
+        (r'/single', SinglePlayer),
     ], debug=True, autoreload=True)
 
 

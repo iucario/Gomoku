@@ -2,211 +2,271 @@
 <html>
 
 <head>
-    <meta charset="utf-8">
-    <title>Gomoku</title>
-    <style type="text/css">
-        canvas {
-            padding: 0;
-            margin: auto;
-            display: none;
-            border: 1px solid black;
-            background-color: grey;
-        }
+	<meta charset="utf-8">
+	<title>Gomoku</title>
+	<style type="text/css">
+		canvas {
+			padding: 0;
+			margin: auto;
+			display: none;
+			border: 1px solid black;
+			border-radius: 10px;
+			background-color: rgb(253, 208, 122);
+		}
 
-        h3 {
-            text-align: center;
-            color: red;
-        }
+		h3 {
+			text-align: center;
+			color: red;
+		}
 
-        .button {
-            margin: auto;
-            padding: 10px 20px;
-            font-size: 20px;
-            border-radius: 8px;
-            border: solid 1px white;
-            -webkit-transition-duration: 0.4s;
-            transition-duration: 0.4s;
-        }
+		.button {
+			margin: auto;
+			padding: 10px 20px;
+			font-size: 20px;
+			border-radius: 8px;
+			border: solid 1px white;
+			-webkit-transition-duration: 0.4s;
+			transition-duration: 0.4s;
+		}
 
-        .button:hover {
-            background-color: #008CBA;
-        }
+		.button:hover {
+			background-color: #008CBA;
+		}
 
-        .menu {
-            width: 500px;
-            margin: 0 auto;
-        }
-    </style>
+		.menu {
+			width: 500px;
+			margin: 0 auto;
+		}
+
+		#input {
+			padding: 5px;
+			font-size: 20px;
+			text-align: center;
+		}
+
+	</style>
 </head>
 
 <body onload="run()">
-    <div style="text-align: center;">
-        <div id="menu">
-            <button id="refresh" class="button" onclick="refresh()">refresh</button>
-            <input type="text" id="input">
-            <button id="create" class="button" onclick="create()">create</button>
-            <h3 id="h3"></h3>
-            <div id="room_list"></div>
-        </div>
-    </div>
-    <canvas id="canvas" height="600" width="600"></canvas>
+	<div style="text-align: center;">
+		<div id="menu">
+			<input type="text" id="input" placeholder="room_name">
+			<button id="create" class="button" onclick="create()">create</button>
+			<button id="refresh" class="button" onclick="refresh()">refresh</button>
+			<button id="single" class="button" onclick="single()">AI</button>
+			<h3 id="h3"></h3>
+			<div id="room_list"></div>
+		</div>
+	</div>
+	<canvas id="canvas" height="500" width="500"></canvas>
 </body>
 
 <script type="text/javascript">
-    var color;
-    var lastmove;
-    var uuid;
-    const ws = new WebSocket('ws://localhost:8000/ws');
+	var color;
+	var lastmove;
+	var uuid;
+	const host = 'localhost';
+	const ws = new WebSocket('ws://' + host + ':8000/ws');
 
-    function run() {
-        refresh();
-        var canvas = document.getElementById("canvas");
-        canvas.addEventListener("mousedown", getPosition, false);
-        ws.addEventListener('open', function (event) {
-            console.log('ws opened');
-        });
-        ws.addEventListener('message', function (event) {
-            console.log('Server:', event.data);
-            if (event.data[event.data.length - 1] == '!') {
-                win(event.data);
-            } else if (event.data[0] == 'u') {
-                uuid = event.data.split(' ')[1];
-            } else if (event.data == 'start') {
-                board();
-            } else {
-                c = event.data.split(',')[0];
-                x = event.data.split(',')[1];
-                y = event.data.split(',')[2];
-                lastmove = c;
-                move(x, y, c);
-            }
-        });
-        ws.addEventListener('error', function (event) {
-            console.log('Error ', event.data);
-        });
-    }
+	function run() {
+		var canvas = document.getElementById("canvas");
+		canvas.addEventListener("click", getPosition, false);
+		ws.addEventListener('open', function (event) {
+			console.log('ws opened');
+		});
+		ws.addEventListener('message', function (event) {
+			console.log('Server:', event.data);
+			if (event.data.split(' ')[1] == 'win!') {
+				win(event.data);
+			} else if (event.data[0] == 'u') {
+				uuid = event.data.split(' ')[1];
+			} else if (event.data == 'start') {
+				board();
+			} else {
+				c = event.data.split(',')[0];
+				x = event.data.split(',')[1];
+				y = event.data.split(',')[2];
+				lastmove = c;
+				move(x, y, c);
+			}
+		});
+		ws.addEventListener('error', function (event) {
+			console.log('Error ', event.data);
+		});
+	}
 
-    function refresh() {
-        document.getElementById("h3").innerHTML = '';
-        var canvas = document.getElementById("canvas");
-        var ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        canvas.style.display = 'none';
-        var url = '/room';
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState == 4) {
-                var list = document.getElementById('room_list');
-                list.innerHTML = '';
-                var obj = JSON.parse(xhr.responseText);
-                for (key in obj) {
-                    var p = document.createElement('p');
-                    if (uuid == key || obj[key].num > 1) {
-                        p.innerHTML = obj[key].name + ` num: ${obj[key].num}`;
-                    } else {
-                        p.innerHTML = obj[key].name + ` num: ${obj[key].num}<button onclick="join('${key}')">join</button>`;
-                    }
-                    list.appendChild(p);
-                }
-            }
-        }
-        xhr.send();
-    }
+	function single() {
+		var url = '/single';
+		var param = '?uuid=' + uuid;
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url + param, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState == 4) {
+				board();
+				color = 'black';
+			}
+		}
+		xhr.send();
+	}
 
-    function create() {
-        var url = '/create';
-        var name = document.getElementById('input').value;
-        var param = '?uuid=' + uuid + '&name=' + name;
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url + param, true);
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState == 4) {
-                refresh();
-                color = 'black';
-            }
-        }
-        xhr.send();
-    }
+	function refresh() {
+		document.getElementById("h3").innerHTML = '';
+		var canvas = document.getElementById("canvas");
+		var ctx = canvas.getContext("2d");
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		canvas.style.display = 'none';
+		var url = '/room';
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState == 4) {
+				var list = document.getElementById('room_list');
+				list.innerHTML = '';
+				var obj = JSON.parse(xhr.responseText);
+				for (key in obj) {
+					var p = document.createElement('p');
+					if (uuid == key || obj[key].num > 1 || obj[key].name == 'AI') {
+						p.innerHTML = obj[key].name + ` num: ${obj[key].num}`;
+					} else {
+						p.innerHTML = obj[key].name +
+							` num: ${obj[key].num}<button onclick="join('${key}')">join</button>`;
+					}
+					list.appendChild(p);
+				}
+			}
+		}
+		xhr.send();
+	}
 
-    function join(uid) {
-        var url = '/join';
-        var param = '?uuid=' + uuid + '&bid=' + uid;
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url + param, true);
-        xhr.send();
-        color = 'white';
-        lastmove = 'white';
-    }
+	function create() {
+		var url = '/create';
+		var name = document.getElementById('input').value;
+		var param = '?uuid=' + uuid + '&name=' + name;
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url + param, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState == 4) {
+				refresh();
+				color = 'black';
+			}
+		}
+		xhr.send();
+	}
 
-    function board() {
-        document.getElementById('room_list').innerHTML = '';
-        var canvas = document.getElementById("canvas");
-        canvas.style.display = 'block';
-        if (canvas.getContext) {
-            var ctx = canvas.getContext("2d");
+	function join(uid) {
+		var url = '/join';
+		var param = '?uuid=' + uuid + '&bid=' + uid;
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url + param, true);
+		xhr.send();
+		color = 'white';
+		lastmove = 'white';
+	}
 
-            for (var i = 30; i <= canvas.width - 30; i += 30) {
-                ctx.beginPath();
-                ctx.lineWidth = 1;
-                ctx.strokeStyle = "black";
-                ctx.moveTo(i, 30);
-                ctx.lineTo(i, canvas.width - 30);
-                ctx.stroke();
-                ctx.moveTo(30, i);
-                ctx.lineTo(canvas.width - 30, i);
-                ctx.stroke();
-            }
+	function board() {
+		document.getElementById('room_list').innerHTML = '';
+		var canvas = document.getElementById("canvas");
+		canvas.style.display = 'block';
+		if (canvas.getContext) {
+			var ctx = canvas.getContext("2d");
+			ctx.font = "12px serif";
+			for (var i = 40; i <= 460; i += 30) {
+				ctx.fillText(Math.abs(((i - 10) / 30 - 15) % 16) + 1, 8, i + 5);
+				ctx.fillText(String.fromCharCode(64 + (i - 10) / 30), i - 5, 485);
+				ctx.beginPath();
+				ctx.lineWidth = 2;
+				ctx.strokeStyle = "black";
+				ctx.moveTo(i, 40);
+				ctx.lineTo(i, canvas.width - 40);
+				ctx.stroke();
+				ctx.moveTo(40, i);
+				ctx.lineTo(canvas.width - 40, i);
+				ctx.stroke();
+			}
+			ctx.fillStyle = 'black';
+			ctx.beginPath();
+			ctx.arc(250, 250, 4, 0, 2 * Math.PI, false);
+			ctx.fill();
+			ctx.beginPath();
+			ctx.arc(130, 130, 4, 0, 2 * Math.PI, false);
+			ctx.fill();
+			ctx.beginPath();
+			ctx.arc(130, 370, 4, 0, 2 * Math.PI, false);
+			ctx.fill();
+			ctx.beginPath();
+			ctx.arc(370, 370, 4, 0, 2 * Math.PI, false);
+			ctx.fill();
+			ctx.beginPath();
+			ctx.arc(370, 130, 4, 0, 2 * Math.PI, false);
+			ctx.fill();
+		}
+	}
 
-        }
-    }
+	function move(x, y, color) {
+		x = x * 30 + 10;
+		y = y * 30 + 10;
+		var canvas = document.getElementById("canvas");
+		var ctx = canvas.getContext("2d");
+		var radius = 14;
+		ctx.beginPath();
+		ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
+		ctx.fillStyle = color;
+		ctx.fill();
+	}
 
-    function move(x, y, color) {
-        x = x * 30;
-        y = y * 30;
-        var canvas = document.getElementById("canvas");
-        var ctx = canvas.getContext("2d");
-        var radius = 14;
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
-        ctx.fillStyle = color;
-        ctx.fill();
-    }
+	function axis(x) {
+		return Math.floor((x + 5) / 30);
+	}
 
-    function axis(x) {
-        return Math.floor((x + 15) / 30);
-    }
+	function getPosition(event) {
+		var x = event.x;
+		var y = event.y;
+		var canvas = document.getElementById("canvas");
+		x -= canvas.offsetLeft;
+		y -= canvas.offsetTop;
+		x = axis(x)
+		y = axis(y);
+		if (lastmove != color) {
+			ws.send(color + ',' + x + ',' + y);
 
-    function getPosition(event) {
-        var x = event.x;
-        var y = event.y;
-        var canvas = document.getElementById("canvas");
-        x -= canvas.offsetLeft;
-        y -= canvas.offsetTop;
-        x = axis(x)
-        y = axis(y);
-        if (lastmove != color) {
-            ws.send(color + ',' + x + ',' + y);
+		}
+	}
 
-        }
-    }
+	function win(e) {
+		document.getElementById("h3").innerHTML = e.split(' ')[0] + " " + e.split(' ')[1];
+		var canvas = document.getElementById("canvas");
+		var ctx = canvas.getContext('2d');
+		canvas.removeEventListener('click', getPosition);
+		path = e.split(' ')[2];
+		i = parseInt(path.split(',')[0]);
+		j = parseInt(path.split(',')[1]);
+		degree = parseInt(path.split(',')[2]);
+		ctx.beginPath();
+		ctx.strokeStyle = 'red';
+		ctx.moveTo(i * 30 + 10, j * 30 + 10);
+		if (degree == 0) {
+			ctx.lineTo(i * 30 + 120 + 10, j * 30 + 10);
+		} else if (degree == 1) {
+			ctx.lineTo(i * 30 + 120 + 10, j * 30 - 120 + 10);
+		} else if (degree == 2) {
+			ctx.lineTo(i * 30 + 10, j * 30 + 120 + 10);
+		} else {
+			ctx.lineTo(i * 30 + 120 + 10, j * 30 + 120 + 10);
+		}
+		ctx.stroke();
+	}
 
-    function win(e) {
-        document.getElementById("h3").innerHTML = e;
-        var canvas = document.getElementById("canvas");
-        canvas.removeEventListener('mousedown', getPosition);
-    }
+	function get(url) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', url, true);
+		xhr.onreadystatechange = function () {
+			if (xhr.readyState == 4) {
+				document.getElementById('room_list').innerHTML = xhr.responseText;
+			}
+		}
+		xhr.send();
+	}
 
-    function get(url) {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState == 4) {
-                document.getElementById('room_list').innerHTML = xhr.responseText;
-            }
-        }
-        xhr.send();
-    }
 </script>
 
 </html>
