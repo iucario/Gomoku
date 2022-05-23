@@ -145,16 +145,19 @@ class EchoWebSocket(tornado.websocket.WebSocketHandler):
                 if win:
                     # print('win', color, win)
                     c.rival.socket.write_message(
-                        'win,' + color+','+ str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                        'win,' + color + ',' + str(win[0]) + ',' + str(win[1]) + ',' +
+                        str(win[2]))
                     self.write_message(
-                        'win,' + color+','+ str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                        'win,' + color + ',' + str(win[0]) + ',' + str(win[1]) + ',' +
+                        str(win[2]))
             else:
                 self.write_message(message)
                 win = self.check_win(x, y)
                 if win:
                     print(color, 'win', win)
                     self.write_message(
-                        'win,' + color+','+ str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                        'win,' + color + ',' + str(win[0]) + ',' + str(win[1]) + ',' +
+                        str(win[2]))
                     return
                 c.rival.move(x, y, 'b')
                 i, j = c.rival.next_move()
