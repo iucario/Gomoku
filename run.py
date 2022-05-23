@@ -30,6 +30,7 @@ class Room():
         self.name = name
         self.num = 1
         self.single = False
+        self.winner = None
 
     def info(self):
         return {'name': self.name, 'white': self.wid, 'num': self.num}
@@ -40,10 +41,12 @@ class Room():
         return False
 
     def lose(self, uid):
-        if uid == self.bid:
-            self.wsocket.write_message('white win!')
-        elif uid == self.wid:
-            self.bsocket.write_message('black win!')
+        if not self.winner:
+            if uid == self.bid:
+                self.wsocket.write_message('white win!')
+            elif uid == self.wid:
+                self.bsocket.write_message('black win!')
+            self.winner = uid
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -88,13 +91,14 @@ class JoinRoom(tornado.web.RequestHandler):
         clients[bid].room = room
         clients[uid].socket.write_message('start')
         clients[bid].socket.write_message('start')
-        self.write('join')
+        self.write('OK')
 
 
 class SinglePlayer(tornado.websocket.WebSocketHandler):
     def get(self):
         name = self.get_argument('name', 'AI')
         uid = self.get_argument('uuid')
+
         rooms[uid] = Room(uid, name)
         rooms[uid].single = True
         clients[uid].single = True
@@ -105,6 +109,16 @@ class SinglePlayer(tornado.websocket.WebSocketHandler):
         self.write(rooms[uid].info())
 
 
+class Chat(tornado.websocket.WebSocketHandler):
+    def get(self):
+        uid = self.get_argument('uuid')
+        msg = self.get_argument('msg', 'NULL')
+        c = clients[uid]
+        r = c.rival
+        r.socket.write_message('msg,' + msg)
+        self.write('OK')
+
+
 class EchoWebSocket(tornado.websocket.WebSocketHandler):
     def open(self):
         if self not in clients:
@@ -112,12 +126,12 @@ class EchoWebSocket(tornado.websocket.WebSocketHandler):
             c = Client(uid, self)
             clients[uid] = c
             uids[self] = uid
-            self.write_message('uid ' + uid)
+            self.write_message('uuid,' + uid)
             print("WebSocket opened")
 
     def on_message(self, message):
-        print('Message:', message)
-        color, x, y = message.split(',')
+        # print('Message:', message)
+        cond, color, x, y = message.split(',')
         board = self.get_board()
         x, y = int(x), int(y)
         if 0 < x < 16 and 0 < y < 16 and (x, y) not in board:
@@ -129,33 +143,33 @@ class EchoWebSocket(tornado.websocket.WebSocketHandler):
                 self.write_message(message)
                 win = self.check_win(x, y)
                 if win:
-                    print(color, 'win', win)
-                    c.rival.socket.write_message(color + ' win!')
+                    # print('win', color, win)
+                    c.rival.socket.write_message(
+                        'win,' + color+','+ str(win[0]) + ',' + str(win[1])+','+str(win[2]))
                     self.write_message(
-                        color + ' win! ' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                        'win,' + color+','+ str(win[0]) + ',' + str(win[1])+','+str(win[2]))
             else:
                 self.write_message(message)
                 win = self.check_win(x, y)
                 if win:
                     print(color, 'win', win)
                     self.write_message(
-                        color + ' win! ' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                        'win,' + color+','+ str(win[0]) + ',' + str(win[1])+','+str(win[2]))
                     return
                 c.rival.move(x, y, 'b')
                 i, j = c.rival.next_move()
                 board.append((i, j))
                 c.rival.move(i, j, 'w')
-                print('Bot', i, j)
-                self.write_message('white,' + str(i) + ',' + str(j))
+                # print('Bot', i, j)
+                self.write_message('move,white,' + str(i) + ',' + str(j))
                 win = self.check_win(i, j)
                 if win:
                     print('white', 'win', win)
                     self.write_message(
-                        'white win! ' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
+                        'win,white,' + str(win[0]) + ',' + str(win[1])+','+str(win[2]))
                     return
 
     def on_close(self):  # remove from clients, delete room, board, win condition
-        print("WebSocket closed")
         uid = uids[self]
         c = clients[uid]
         if not c.single:
@@ -163,8 +177,12 @@ class EchoWebSocket(tornado.websocket.WebSocketHandler):
                 c.room.lose(uid)
         else:
             del c.rival
-        del rooms[c.room.bid]
+        if c.room:
+            if rooms.get(c.room.bid):
+                del rooms[c.room.bid]
+            del c.room
         del clients[uid]
+        print("WebSocket closed")
 
     def check_win(self, x, y):
         board = self.get_board()
@@ -208,6 +226,7 @@ def make_app():
         (r'/create', CreateRoom),
         (r'/join', JoinRoom),
         (r'/single', SinglePlayer),
+        (r'/chat', Chat),
     ], debug=True, autoreload=True)
 
 
