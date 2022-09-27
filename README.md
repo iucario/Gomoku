@@ -1,4 +1,4 @@
-# Gomuku
+# Gomoku
 
 ![demo.png](demo.png)
 
